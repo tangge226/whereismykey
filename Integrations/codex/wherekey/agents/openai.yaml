@@ -1,0 +1,4 @@
+interface:
+  display_name: "WhereKey"
+  short_description: "安全调用本地 API 服务与 Key，不读取或回显秘密"
+  default_prompt: "Use $wherekey to run this project with a locally stored API service without exposing its key."
