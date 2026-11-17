@@ -44,6 +44,7 @@ public enum NoteImportParser {
     private struct SecretMatch: Equatable {
         let value: String
         let environmentVariable: String?
+        let sourceOffset: Int
     }
 
     // Specific providers precede broader OpenAI-compatible matches.
@@ -247,7 +248,7 @@ public enum NoteImportParser {
         let urls = extractURLs(command)
         let headingLines = Array(lines.prefix(curlIndex))
         let name = preferredName(from: headingLines, preset: preset, fallbackURL: urls.first, ordinal: nil)
-        let environment = preset?.environmentVariable ?? "API_KEY"
+        let environment = preset?.environmentVariable ?? ServiceDraft.suggestedEnvironmentName(for: name)
         let credentials = extracted.map {
             [CredentialDraft(alias: "default", environmentVariable: environment, secret: $0.secret, isDefault: true)]
         } ?? []
@@ -298,14 +299,14 @@ public enum NoteImportParser {
         }
 
         let explicitEnvironment = secrets.compactMap(\.environmentVariable).first
-        let environment = explicitEnvironment ?? preset?.environmentVariable ?? "API_KEY"
         let suppliedURL = urls.first
         let shouldUsePresetURL = suppliedURL == nil || isHomepageURL(suppliedURL!, for: preset)
         let baseURL = shouldUsePresetURL ? (preset?.baseURL ?? suppliedURL ?? "") : (suppliedURL ?? "")
+        let name = preferredName(from: lines, preset: preset, fallbackURL: suppliedURL, ordinal: nil)
+        let environment = explicitEnvironment ?? preset?.environmentVariable ?? ServiceDraft.suggestedEnvironmentName(for: name)
         let baseURLVariable = preset?.baseURLVariable.isEmpty == false
             ? preset!.baseURLVariable
             : suggestedBaseURLVariable(from: environment)
-        let name = preferredName(from: lines, preset: preset, fallbackURL: suppliedURL, ordinal: nil)
 
         var credentialDrafts: [CredentialDraft] = []
         for (index, match) in secrets.enumerated() {
@@ -328,6 +329,8 @@ public enum NoteImportParser {
         let draft = ServiceDraft(
             kind: .apiKey,
             name: name,
+            category: preset == nil ? .custom : .ai,
+            checkMode: preset == nil ? .manual : .automatic,
             environmentVariable: environment,
             baseURL: baseURL,
             baseURLVariable: baseURL.isEmpty ? "" : baseURLVariable,
@@ -372,6 +375,18 @@ public enum NoteImportParser {
     private static func extractSecrets(_ text: String) -> [SecretMatch] {
         var results: [SecretMatch] = []
 
+        // Explicitly labelled credentials need no vendor prefix, minimum length,
+        // or digit requirement. Preserve quoted punctuation and spaces verbatim.
+        let label = #"(?:[a-z_][a-z0-9_]*(?:key|token|secret)|key|token|secret)"#
+        for valuePattern in [#"\"([^\"\r\n]+)\""#, #"'([^'\r\n]+)'"#, #"([^\s\"'\r\n]+)"#] {
+            addMatches(
+                pattern: #"(?im)^\s*(?:export\s+)?("# + label + #")\s*[:=：]\s*"# + valuePattern + #"\s*$"#,
+                in: text, valueGroup: 2, environmentGroup: 1, preserveValue: true, to: &results
+            )
+        }
+        let explicitMatches = results
+        let explicitValues = results.map(\.value)
+
         addMatches(
             pattern: #"(?i)\b([a-z_][a-z0-9_]*(?:api_key|access_key|key|token|secret))\s*[:=：]\s*[\"'“”]?([a-z0-9][a-z0-9._+\-/=]{7,})"#,
             in: text,
@@ -404,6 +419,12 @@ public enum NoteImportParser {
         var seen = Set<String>()
         return results.filter { match in
             let lowered = match.value.lowercased()
+            if explicitMatches.contains(match) {
+                return seen.insert(match.value).inserted
+            }
+            // Heuristic matches must not create extra, truncated versions of an
+            // explicitly labelled credential containing punctuation or spaces.
+            if explicitValues.contains(where: { $0.contains(match.value) || match.value.contains($0) }) { return false }
             let hasOpaqueMarker = match.value.contains(where: { $0.isNumber }) || match.value.contains(where: { "_-./+=".contains($0) })
             guard hasOpaqueMarker,
                   !lowered.hasPrefix("http"),
@@ -411,7 +432,7 @@ public enum NoteImportParser {
                   !lowered.contains("your_"),
                   !lowered.contains("example") else { return false }
             return seen.insert(match.value).inserted
-        }
+        }.sorted { $0.sourceOffset < $1.sourceOffset }
     }
 
     private static func addMatches(
@@ -419,21 +440,25 @@ public enum NoteImportParser {
         in text: String,
         valueGroup: Int,
         environmentGroup: Int?,
+        preserveValue: Bool = false,
         to results: inout [SecretMatch]
     ) {
         guard let regex = try? NSRegularExpression(pattern: pattern) else { return }
         let range = NSRange(text.startIndex..., in: text)
         for match in regex.matches(in: text, range: range) {
             guard let valueRange = Range(match.range(at: valueGroup), in: text) else { continue }
-            let value = String(text[valueRange]).trimmingCharacters(in: CharacterSet(charactersIn: "'\"“”,;，；。"))
+            let rawValue = String(text[valueRange])
+            let value = preserveValue ? rawValue : rawValue.trimmingCharacters(in: CharacterSet(charactersIn: "'\"“”,;，；。"))
             let environment: String?
             if let environmentGroup,
                let environmentRange = Range(match.range(at: environmentGroup), in: text) {
-                environment = String(text[environmentRange]).uppercased()
+                let label = String(text[environmentRange])
+                let genericLabel = ["key", "token", "secret"].contains(label.lowercased())
+                environment = genericLabel && label == label.lowercased() ? nil : (preserveValue ? label : label.uppercased())
             } else {
                 environment = nil
             }
-            results.append(SecretMatch(value: value, environmentVariable: environment))
+            results.append(SecretMatch(value: value, environmentVariable: environment, sourceOffset: match.range(at: valueGroup).location))
         }
     }
 

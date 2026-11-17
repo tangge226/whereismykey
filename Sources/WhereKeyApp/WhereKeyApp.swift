@@ -8,7 +8,7 @@ struct WhereKeyApplication: App {
         Window("WhereKey", id: "main") {
             ContentView()
                 .environmentObject(state)
-                .frame(minWidth: 820, minHeight: 540)
+                .frame(minWidth: 880, minHeight: 560)
                 .task { state.start() }
                 .alert("WhereKey", isPresented: Binding(
                     get: { state.errorMessage != nil },
@@ -24,7 +24,7 @@ struct WhereKeyApplication: App {
                     Text(state.errorMessage ?? "")
                 }
         }
-        .defaultSize(width: 920, height: 620)
+        .defaultSize(width: 1040, height: 650)
 
         MenuBarExtra("WhereKey", systemImage: "key.fill") {
             MenuBarContent()

@@ -1,0 +1,44 @@
+name: 问题反馈
+description: 报告可以复现的应用或 CLI 问题
+title: "[Bug] "
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        请使用虚构数据复现，不要上传真实 Key、完整 curl、元数据文件、内部地址或私人项目截图。
+        安全问题请按照 [SECURITY.md](https://github.com/tangge226/whereismykey/blob/main/SECURITY.md) 私下报告。
+  - type: input
+    id: version
+    attributes:
+      label: WhereKey 版本
+      placeholder: 例如 1.4.2；源码构建请附 commit
+    validations:
+      required: true
+  - type: input
+    id: system
+    attributes:
+      label: macOS 版本与芯片
+      placeholder: 例如 macOS 15，Apple Silicon
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      description: 提供不包含秘密的最小复现。
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 预期结果
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: 实际结果
+      description: 错误文字或已脱敏截图；请勿提交环境变量值。
+    validations:
+      required: true

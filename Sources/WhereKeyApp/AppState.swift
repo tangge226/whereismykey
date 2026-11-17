@@ -8,10 +8,11 @@ final class AppState: ObservableObject {
     @Published var errorMessage: String?
     @Published var offersRestart = false
     @Published var isChecking = false
+    @Published var storageUnavailable = false
+    @Published var lastSavedServiceID: UUID?
 
     let repository: WhereKeyRepository
     private var server: IPCServer?
-    private var didRunStartupAPIKeyCheck = false
 
     init() {
         do {
@@ -19,13 +20,14 @@ final class AppState: ObservableObject {
             self.repository = repository
             self.snapshot = repository.snapshot()
         } catch {
-            self.repository = try! WhereKeyRepository(metadataStore: MetadataStore(directoryURL: FileManager.default.temporaryDirectory.appendingPathComponent("WhereKey-Recovery")))
+            self.repository = try! WhereKeyRepository(metadataStore: MetadataStore(directoryURL: FileManager.default.temporaryDirectory.appendingPathComponent("WhereKey-Recovery-\(UUID().uuidString)")))
+            storageUnavailable = true
             present(error)
         }
     }
 
     func start() {
-        guard server == nil else { return }
+        guard server == nil, !storageUnavailable else { return }
         let repository = repository
         let server = IPCServer { [weak self] request in
             do {
@@ -53,16 +55,15 @@ final class AppState: ObservableObject {
                 DispatchQueue.main.async { self?.refresh() }
                 return response
             } catch {
+                DispatchQueue.main.async { self?.refresh() }
                 return IPCResponse(ok: false, error: error.localizedDescription)
             }
         }
         do {
             try server.start()
             self.server = server
-            if !didRunStartupAPIKeyCheck {
-                didRunStartupAPIKeyCheck = true
-                Task { await checkAPIKeys() }
-            }
+            // Opening the directory is metadata-only. Check only the service a
+            // user saves/requests; startup must not unlock unrelated secrets.
         } catch {
             present(error)
         }
@@ -75,12 +76,17 @@ final class AppState: ObservableObject {
     }
 
     func save(_ draft: ServiceDraft) async -> Bool {
+        guard !storageUnavailable else {
+            present(WhereKeyError.storage("原有数据未能加载，请修复数据或重新打开 WhereKey 后再保存。"))
+            return false
+        }
         do {
             let id = try repository.save(draft)
+            lastSavedServiceID = id
             refresh()
             let state = repository.snapshot()
-            if let service = state.services.first(where: { $0.id == id }) {
-                Task { await check(service.name) }
+            if let service = state.services.first(where: { $0.id == id }), service.checkMode == .automatic {
+                Task { await check(service.name, automatic: true) }
             }
             return true
         } catch {
@@ -90,14 +96,15 @@ final class AppState: ObservableObject {
     }
 
     func deleteService(_ id: UUID) {
+        guard !storageUnavailable else { return }
         do { try repository.deleteService(id); refresh() }
         catch { present(error) }
     }
 
-    func check(_ serviceName: String, keyAlias: String? = nil) async {
+    func check(_ serviceName: String, keyAlias: String? = nil, automatic: Bool = false) async {
         isChecking = true
         do {
-            _ = try await Task.detached { try self.repository.check(service: serviceName, keyAlias: keyAlias) }.value
+            _ = try await Task.detached { try self.repository.check(service: serviceName, keyAlias: keyAlias, automatic: automatic) }.value
             refresh()
         } catch { present(error) }
         isChecking = false
@@ -110,15 +117,25 @@ final class AppState: ObservableObject {
         isChecking = false
     }
 
-    func checkAPIKeys() async {
+    func authorize(_ serviceName: String) async {
         isChecking = true
-        _ = await Task.detached { self.repository.checkAllAPIKeys() }.value
-        refresh()
+        do {
+            let repository = repository
+            try await Task.detached { try repository.authorize(service: serviceName) }.value
+            await check(serviceName)
+        } catch { present(error) }
         isChecking = false
     }
 
     func projectPaths(serviceID: UUID, credentialID: UUID? = nil) -> [String] {
-        repository.projectPaths(for: serviceID, credentialID: credentialID)
+        let ids = Set(snapshot.usages.filter { $0.serviceID == serviceID && (credentialID == nil || $0.credentialID == credentialID) }.map(\.projectID))
+        return snapshot.projects.filter { ids.contains($0.id) }.map(\.path).sorted()
+    }
+
+    func serviceStatus(_ service: ServiceRecord) -> HealthStatus {
+        if service.kind == .curl { return service.curlStatus }
+        let credentials = snapshot.credentials.filter { $0.serviceID == service.id }
+        return credentials.first(where: { $0.id == service.defaultCredentialID })?.status ?? credentials.first?.status ?? .unchecked
     }
 
     func present(_ error: Error) {

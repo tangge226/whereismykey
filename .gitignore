@@ -5,3 +5,20 @@ dist/
 *.dmg
 *.xcuserstate
 .DS_Store
+
+# Local design review material can include private paths and service metadata.
+/design/
+
+# Local credentials, exports, and signing material.
+.env
+.env.*
+!.env.example
+metadata.json
+metadata.*.backup.json
+*.keychain
+*.keychain-db
+*.p12
+*.p8
+*.mobileprovision
+*.pem
+*.key

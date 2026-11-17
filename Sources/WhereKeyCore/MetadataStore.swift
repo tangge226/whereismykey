@@ -21,12 +21,28 @@ public final class MetadataStore {
         let data = try Data(contentsOf: fileURL)
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        let state = try decoder.decode(MetadataState.self, from: data)
-        guard state.schemaVersion == 1 else {
-            throw WhereKeyError.storage("不支持的数据版本：\(state.schemaVersion)")
+        let version = try JSONDecoder().decode(Version.self, from: data).schemaVersion
+        guard version == 1 || version == 2 else {
+            throw WhereKeyError.storage("不支持的数据版本：\(version)")
+        }
+        var state = try decoder.decode(MetadataState.self, from: data)
+        if version == 1 {
+            // Keep IDs and Keychain accounts unchanged. Back up before replacing v1.
+            let backup = directoryURL.appendingPathComponent("metadata.v1.backup.json")
+            var isDirectory: ObjCBool = false
+            if FileManager.default.fileExists(atPath: backup.path, isDirectory: &isDirectory) {
+                guard !isDirectory.boolValue else { throw WhereKeyError.storage("元数据备份路径被目录占用，已保留原数据") }
+            } else {
+                try data.write(to: backup, options: .atomic)
+                try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: backup.path)
+            }
+            state.schemaVersion = 2
+            try save(state)
         }
         return state
     }
+
+    private struct Version: Decodable { let schemaVersion: Int }
 
     public func save(_ state: MetadataState) throws {
         try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
