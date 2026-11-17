@@ -1,10 +1,30 @@
 # WhereKey
 
-一个 macOS 本地 API 服务与凭证目录：在桌面应用中管理 Key，通过 CLI 交给需要它的程序使用。支持大模型 API、自建服务、图萃 Tucui 和保存的 curl 请求。
+**让 Codex 等本机工具使用 API Key，减少手动输入和在聊天里传递明文。**
+
+WhereKey 是一个 macOS 本地 API 服务与凭证管理工具。你在桌面应用中保存 Key，让工具通过服务名和 CLI 调用需要的服务。支持大模型 API、自建服务、图萃 Tucui 和保存的 curl 请求。
 
 Key 与请求秘密保存在 macOS Keychain。WhereKey 不会在你的业务项目中生成 `.env` 或写入凭证配置。
 
 [源码安装](#安装) · [更新记录](CHANGELOG.md) · [参与贡献](CONTRIBUTING.md) · [安全说明](SECURITY.md) · [Apache-2.0 许可证](LICENSE)
+
+## 为什么需要 WhereKey
+
+使用 Codex 或能执行本机命令的 AI 办公工具时，经常会遇到“这个服务需要 API Key”。把 Key 明文贴进聊天会增加暴露风险；每次自己在终端、配置文件和不同工具之间重复输入，又容易出错，也不方便管理。
+
+WhereKey 把这件事变成一个本机流程：
+
+1. **你保存 Key**：在 WhereKey 中添加服务和 Key，秘密保存在 Mac 的系统钥匙串（macOS Keychain）中；不需要把真实 Key 发到聊天里。
+2. **工具使用服务名**：配合仓库自带的 Codex Skill，Codex 可以查看服务名、Key 别名和调用方式。查看目录和详情不会读取真实 Key。
+3. **本机程序使用凭证**：WhereKey 按服务配置向指定子进程注入环境变量，或执行保存的请求。正常使用时，无需手动复制 Key、把它写入命令参数或在每个业务项目中保存一份。
+
+例如，服务配置好后，Codex 可以用下面的命令运行你的程序，命令里只有服务名，没有 Key 明文：
+
+```bash
+wherekey run --service "My API" -- python3 app.py
+```
+
+**安全保障来自具体机制**：系统钥匙串保管秘密、App 与 CLI 双向校验身份、目录查询不解锁 Key、需要系统许可时由你处理当前凭证。它们减少日常传递和存储凭证的风险；获准运行的目标程序仍能读取注入的 Key，真实 API 调用也需要向目标服务发送鉴权信息。请只运行信任的程序，详细边界见 [安全说明](SECURITY.md)。
 
 ## 安装
 
@@ -68,6 +88,14 @@ wherekey --help
 [历史 Releases](https://github.com/tangge226/whereismykey/releases) 中的 DMG 仅是另一种分发记录，不是源码安装的前提。当前尚未完成 Developer ID 签名或 Apple 公证；请勿为运行应用关闭系统安全防护。
 
 ## 开始使用
+
+### 让 Codex 使用已保存的服务
+
+安装时选择 `--with-codex-skill`，并在 WhereKey 中配置好服务后，可以把任务和服务名告诉 Codex，例如：
+
+> 请使用 WhereKey 中的“My API”服务运行当前项目，按 wherekey Skill 查看调用方式。通过 WhereKey 使用已保存的凭证，不要让我把 Key 贴到聊天里，也不要输出 Key 或把它写入项目文件。如果配置缺失，请告诉我到 WhereKey 中补充。
+
+Key 只需由你在 WhereKey 中填写。后续换 Key 时在应用中更新；按服务名调用的命令无需包含新的 Key。其他 AI 工具需能够执行本机 CLI，并遵守同样的凭证使用约定；仓库目前提供的是 Codex Skill。
 
 ### 粘贴添加
 
