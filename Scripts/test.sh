@@ -9,12 +9,30 @@ swiftc -swift-version 5 -sdk "$(xcrun --sdk macosx --show-sdk-path)" -target "$(
   "$PROJECT_ROOT/Scripts/self-test.swift" \
   -framework Security \
   -o "$PROJECT_ROOT/.build/local/self-test"
-TEST_PORT=$((18000 + $$ % 1000))
+TEST_SERVER_DIR="$(mktemp -d "$PROJECT_ROOT/.build/test-server.XXXXXX")"
+TEST_READY_FILE="$TEST_SERVER_DIR/port"
 TEST_SOCKET_DIR="$PROJECT_ROOT/.build/test-socket-$$"
-python3 "$PROJECT_ROOT/Scripts/test-server.py" "$TEST_PORT" >/dev/null 2>&1 &
+python3 "$PROJECT_ROOT/Scripts/test-server.py" 0 "$TEST_READY_FILE" >"$TEST_SERVER_DIR/server.log" 2>&1 &
 TEST_SERVER_PID=$!
-trap 'kill "$TEST_SERVER_PID" 2>/dev/null || true' EXIT
-sleep 0.2
+cleanup() {
+  kill "$TEST_SERVER_PID" 2>/dev/null || true
+  rm -rf "$TEST_SERVER_DIR"
+}
+trap cleanup EXIT
+for attempt in {1..100}; do
+  if [[ -s "$TEST_READY_FILE" ]]; then break; fi
+  if ! kill -0 "$TEST_SERVER_PID" 2>/dev/null; then
+    cat "$TEST_SERVER_DIR/server.log"
+    exit 1
+  fi
+  sleep 0.1
+done
+if [[ ! -s "$TEST_READY_FILE" ]]; then
+  echo "Fixture server did not become ready within 10 seconds" >&2
+  cat "$TEST_SERVER_DIR/server.log"
+  exit 1
+fi
+TEST_PORT="$(cat "$TEST_READY_FILE")"
 WHEREKEY_TEST_URL="http://127.0.0.1:$TEST_PORT/" WHEREKEY_TEST_CLI="$PROJECT_ROOT/.build/local/wherekey" WHEREKEY_SOCKET_DIR="$TEST_SOCKET_DIR" "$PROJECT_ROOT/.build/local/self-test"
 "$PROJECT_ROOT/.build/local/wherekey" --help >/dev/null
 echo "Build and CLI smoke tests passed"

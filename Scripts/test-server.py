@@ -2,6 +2,7 @@
 
 import json
 import sys
+from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlsplit
 
@@ -50,4 +51,7 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(b'{"created":true}')
 
 
-ThreadingHTTPServer(("127.0.0.1", int(sys.argv[1])), Handler).serve_forever()
+server = ThreadingHTTPServer(("127.0.0.1", int(sys.argv[1])), Handler)
+if len(sys.argv) > 2:
+    Path(sys.argv[2]).write_text(str(server.server_address[1]))
+server.serve_forever()
