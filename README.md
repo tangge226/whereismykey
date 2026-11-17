@@ -4,19 +4,68 @@
 
 Key 与请求秘密保存在 macOS Keychain。WhereKey 不会在你的业务项目中生成 `.env` 或写入凭证配置。
 
-[下载版本](https://github.com/tangge226/whereismykey/releases/latest) · [更新记录](CHANGELOG.md) · [参与贡献](CONTRIBUTING.md) · [安全说明](SECURITY.md)
+[源码安装](#安装) · [更新记录](CHANGELOG.md) · [参与贡献](CONTRIBUTING.md) · [安全说明](SECURITY.md)
 
 ## 安装
 
-需要 **macOS 14 或更新版本**。发布的 Universal 2 DMG 同时包含 Apple Silicon 与 Intel 架构。
+主要使用方式是：把这个仓库交给自己的 Codex，让它在本机检查环境、从源码构建并安装。**不需要下载 DMG，也不需要配置 Developer ID 证书。** 本地构建会使用 macOS 自带的 ad-hoc 签名，保持 App 与内置 CLI 的身份校验。
 
-1. 从 [Releases](https://github.com/tangge226/whereismykey/releases) 下载 DMG，将 `WhereKey.app` 拖到“应用程序”，打开应用。
-2. 如需 CLI 和 Codex Skill，在 DMG 中运行 `Install CLI & Codex Skill.command`。此安装器会通过 `sudo` 安装应用并创建 `/usr/local/bin/wherekey` 链接，同时把 Skill 安装到 `~/.codex/skills/wherekey`；已有同名 Skill 会先备份。
-3. 仅使用桌面管理功能时，可以跳过 CLI 和 Skill 安装。
+需要 **macOS 14+、Git、Swift 6 工具链、Apple SDK（Xcode 或适用的 Command Line Tools）和 `python3`**。源码使用 Swift 5 语言模式。
 
-当前发布产物使用 **ad-hoc 签名**，尚未取得 Developer ID 签名和 Apple 公证。macOS 可能阻止下载后的应用运行；如果系统不允许打开，请使用下方源码构建方式。请勿为了运行本应用关闭系统安全防护。
+### 交给 Codex
 
-仓库目前按维护者的公开计划逐步完善；私有仓库的 Release 仅对有访问权限的账号可见。
+在自己的 Codex 中打开仓库，或把下面这段话和 [仓库地址](https://github.com/tangge226/whereismykey) 一起交给它：
+
+> 请阅读 README.md 和 AGENTS.md，在我的 Mac 上从源码安装 WhereKey。先检查环境和已有安装，使用 Scripts/test.sh 做合成凭证自测；通过后运行 Scripts/install-local.sh --skip-build --with-codex-skill --open。已有安装请先正常退出并保留配置，App 和 CLI 必须整套更新。请确认 command -v wherekey 指向本次安装；不要读取我的真实 Key、自动检查已有服务、关闭系统安全防护或发布安装包。系统权限窗口由我本人处理。
+
+仓库当前仍按维护者的公开计划完善；在它转为公开之前，需要自己的 GitHub 账号有仓库访问权限。
+
+### 手动执行同一流程
+
+```bash
+git clone https://github.com/tangge226/whereismykey.git
+cd whereismykey
+./Scripts/test.sh
+```
+
+自测通过后再安装：
+
+```bash
+./Scripts/install-local.sh --skip-build --with-codex-skill --open
+```
+
+默认安装位置：
+
+- App：`~/Applications/WhereKey.app`
+- CLI 链接：`~/.local/bin/wherekey`，指向同一 App 内的 CLI。
+- 可选 Codex Skill：`$CODEX_HOME/skills/wherekey`，未设置 `CODEX_HOME` 时为 `~/.codex/skills/wherekey`。仅使用桌面应用或普通 CLI 时，可省略 `--with-codex-skill`。
+
+安装器不使用 `sudo`，不读取或改写 Keychain、元数据和已有 Key。它会验证构建产物，备份已有 App、CLI 与选择安装的 Skill，再整套替换；失败时尝试恢复原文件。目标 App 正在运行时会停止安装，请先正常退出。
+
+若 shell 尚未把 `~/.local/bin` 放在 PATH 前面，可在当前终端执行：
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+rehash
+command -v wherekey
+wherekey --help
+```
+
+需要长期生效时，可把 `export PATH=…` 加到自己的 shell 配置。若 `command -v wherekey` 仍指向 `/usr/local/bin` 等旧位置，先处理 PATH 优先级，避免新 App 配旧 CLI。安装器不会擅自覆盖这些其他位置的文件。
+
+### 升级已有安装
+
+先确认 App 和 `command -v wherekey` 的实际位置，再正常退出该 App。拉取源码、通过自测，然后在原位置整套更新。例如当前用户对这两个目录有写权限时：
+
+```bash
+./Scripts/install-local.sh --skip-build --app-dir /Applications --bin-dir /usr/local/bin
+```
+
+目标文件不属于 WhereKey 时，安装器会拒绝覆盖。原 App、CLI 和可选 Skill 的备份保存在所选应用目录下的 `.WhereKey-backup.*` 私有目录中；需要回退时应同时恢复同一份 App 与 CLI。应用数据仍留在原来的本机位置，Keychain 不会被导出或迁移。
+
+完整选项见 `./Scripts/install-local.sh --help`。默认只安装，`--open` 才会尝试打开应用；如果其他位置的 WhereKey 仍在运行，会提示先退出该实例。
+
+[历史 Releases](https://github.com/tangge226/whereismykey/releases) 中的 DMG 仅是另一种分发记录，不是源码安装的前提。当前尚未完成 Developer ID 签名或 Apple 公证；请勿为运行应用关闭系统安全防护。
 
 ## 开始使用
 

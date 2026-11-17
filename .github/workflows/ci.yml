@@ -26,21 +26,12 @@ jobs:
         run: ./Scripts/test.sh
       - name: Swift Package tests
         run: swift test
-  universal-package:
-    name: Universal package
-    runs-on: macos-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - name: Package Apple Silicon and Intel DMG
-        run: ./Scripts/package.sh
-      - name: Verify checksum
-        working-directory: dist
-        run: shasum -a 256 -c SHA256SUMS
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: WhereKey-universal
-          path: |
-            dist/*.dmg
-            dist/SHA256SUMS
-          if-no-files-found: error
+      - name: Source installer smoke test (isolated)
+        run: |
+          set -eu
+          fixture="$(mktemp -d "$RUNNER_TEMP/wherekey-install.XXXXXXXX")"
+          trap 'rm -rf "$fixture"' EXIT
+          ./Scripts/install-local.sh --skip-build --app-dir "$fixture/Applications" --bin-dir "$fixture/bin" --with-codex-skill --codex-skills-dir "$fixture/skills"
+          "$fixture/bin/wherekey" --help > /dev/null
+          ./Scripts/install-local.sh --skip-build --app-dir "$fixture/Applications" --bin-dir "$fixture/bin" --with-codex-skill --codex-skills-dir "$fixture/skills"
+          codesign --verify --deep --strict "$fixture/Applications/WhereKey.app"
