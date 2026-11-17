@@ -4,7 +4,7 @@
 
 Key 与请求秘密保存在 macOS Keychain。WhereKey 不会在你的业务项目中生成 `.env` 或写入凭证配置。
 
-[源码安装](#安装) · [更新记录](CHANGELOG.md) · [参与贡献](CONTRIBUTING.md) · [安全说明](SECURITY.md)
+[源码安装](#安装) · [更新记录](CHANGELOG.md) · [参与贡献](CONTRIBUTING.md) · [安全说明](SECURITY.md) · [Apache-2.0 许可证](LICENSE)
 
 ## 安装
 
@@ -18,7 +18,7 @@ Key 与请求秘密保存在 macOS Keychain。WhereKey 不会在你的业务项�
 
 > 请阅读 README.md 和 AGENTS.md，在我的 Mac 上从源码安装 WhereKey。先检查环境和已有安装，使用 Scripts/test.sh 做合成凭证自测；通过后运行 Scripts/install-local.sh --skip-build --with-codex-skill --open。已有安装请先正常退出并保留配置，App 和 CLI 必须整套更新。请确认 command -v wherekey 指向本次安装；不要读取我的真实 Key、自动检查已有服务、关闭系统安全防护或发布安装包。系统权限窗口由我本人处理。
 
-仓库当前仍按维护者的公开计划完善；在它转为公开之前，需要自己的 GitHub 账号有仓库访问权限。
+仓库公开提供源码。在目标 Mac 上使用能够执行本机终端命令的 Codex，按以下流程构建和安装，无需申请仓库访问权限。
 
 ### 手动执行同一流程
 
@@ -170,4 +170,4 @@ swift test
 
 欢迎提交问题和小范围 PR，提交前请阅读 [贡献指南](CONTRIBUTING.md)。截图、复现步骤和测试数据必须脱敏。
 
-开源许可证正在确认，当前尚未提供 `LICENSE` 文件；公开前需要补齐。最终使用与分发条款以仓库根目录的许可证文件为准。
+本项目采用 [Apache License 2.0](LICENSE)（SPDX：`Apache-2.0`）。版权与归属说明见 [NOTICE](NOTICE)。

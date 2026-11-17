@@ -37,6 +37,7 @@ codesign --force --sign - --options runtime --identifier com.wherekey.cli "$BUIL
 
 mkdir -p "$APP_BUNDLE/Contents/MacOS" "$APP_BUNDLE/Contents/Helpers" "$APP_BUNDLE/Contents/Resources/Integrations/codex"
 cp "$PROJECT_ROOT/Resources/Info.plist" "$APP_BUNDLE/Contents/Info.plist"
+cp "$PROJECT_ROOT/LICENSE" "$PROJECT_ROOT/NOTICE" "$APP_BUNDLE/Contents/Resources/"
 cp "$BUILD_ROOT/WhereKeyApp" "$APP_BUNDLE/Contents/MacOS/WhereKeyApp"
 cp "$BUILD_ROOT/wherekey" "$APP_BUNDLE/Contents/Helpers/wherekey"
 ditto "$PROJECT_ROOT/Integrations/codex/wherekey" "$APP_BUNDLE/Contents/Resources/Integrations/codex/wherekey"

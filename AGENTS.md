@@ -23,4 +23,4 @@
 - `./Scripts/build-local.sh` 构建本机 App/CLI；`./Scripts/test.sh` 是本地标准验证入口。SwiftPM 测试推荐完整 Xcode，CI 会运行 `swift test`。
 - 改动源码并重新构建后，App 和 CLI 要一起安装；不能只替换全局 CLI 或拆开配对构建。
 - 不把 .build、dist、用户元数据、Keychain、私人截图或本地备份提交到 Git。
-- 除非用户要求，不制作或发布新 DMG/Release，不配置开发者证书。许可证仍待维护者决定，不自行添加。
+- 除非用户要求，不制作或发布新 DMG/Release，不配置开发者证书。项目采用 Apache-2.0；保留根目录 LICENSE 和 NOTICE，不擅自更改许可。
