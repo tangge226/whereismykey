@@ -24,8 +24,8 @@ WhereKey 管理本机 API 凭证，安全报告可能包含比普通故障报告
 - **同用户恶意程序仍不在隔离保证内**：它可以调用真正的 CLI，把凭证交给其指定的程序；也可能替换整个可写安装目录。CDHash pin、防符号链接和文件权限不等于完整抵御当前用户身份下的恶意软件。应信任当前登录用户、安装目录及获准执行的程序。
 - 该项目尚未接受独立安全审计，现有测试不能替代安全评估。
 
-## 公开前优先项
+## 后续安全工作
 
-正式发布链路仍需 Developer ID / Team ID 信任锚点、Apple 公证、既有 Keychain ACL 迁移，以及独立安全审计。若产品目标包含抵御同用户恶意进程，还需另行设计凭证使用授权策略，而不能只依赖 CLI 身份。当前回归测试使用合成凭证、mock Keychain 和隔离 socket，不使用真实 Key。
+预构建二进制的广泛分发仍需补齐 Developer ID / Team ID 信任锚点与 Apple 公证；既有 Keychain ACL 迁移和独立安全审计也仍需后续处理。源码自助安装不要求用户配置开发者证书。若产品目标包含抵御同用户恶意进程，还需另行设计凭证使用授权策略，而不能只依赖 CLI 身份。当前回归测试使用合成凭证、mock Keychain 和隔离 socket，不使用真实 Key。
 
 身份与 ACL 设计依据：[Apple Code Signing In Depth](https://developer.apple.com/library/archive/technotes/tn2206/_index.html)。

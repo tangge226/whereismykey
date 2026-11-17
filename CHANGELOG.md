@@ -2,13 +2,15 @@
 
 ## 未发布
 
+- 项目公开源码，采用 Apache-2.0，增加 LICENSE 和 NOTICE；社区可按 README 使用自己的 Codex 从源码安装。
+
 - 新增无需 sudo 的源码安装器、Codex 自助安装提示和 AGENTS 安装约定；本机验证版本为 1.4.3，不创建新 DMG/Release。
 
 - Keychain 的读、写、删统一采用独立静默认证上下文；策略设置/恢复失败时不继续秘密操作或返回秘密，新增纯 mock 回归。
 - IPC 在 JSON 传输前使用内核 audit token 与 CDHash pin 双向认证 App/CLI，拒绝同 identifier 的其他代码，不提供环境变量认证绕过。
 - 加固 socket 路径、实例锁、inode 所有权、FD 继承、SIGPIPE、帧长度、绝对超时和并发上限。
 - 构建签名启用 hardened runtime，移除 identifier-only 自定义要求，保留系统默认 ad-hoc CDHash 要求。
-- 真实 Keychain 项未读取或自动迁移；历史 ACL、Developer ID 和公证仍是后续工作。许可证不变。
+- 真实 Keychain 项未读取或自动迁移；历史 ACL、Developer ID 和公证仍是后续工作。
 
 ## 1.4.2
 

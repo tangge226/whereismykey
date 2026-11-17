@@ -43,6 +43,7 @@ build_architecture x86_64
 
 mkdir -p "$APP_BUNDLE/Contents/MacOS" "$APP_BUNDLE/Contents/Helpers" "$APP_BUNDLE/Contents/Resources/Integrations/codex"
 cp "$PROJECT_ROOT/Resources/Info.plist" "$APP_BUNDLE/Contents/Info.plist"
+cp "$PROJECT_ROOT/LICENSE" "$PROJECT_ROOT/NOTICE" "$APP_BUNDLE/Contents/Resources/"
 lipo -create "$PACKAGE_ROOT/arm64/WhereKeyApp" "$PACKAGE_ROOT/x86_64/WhereKeyApp" -output "$APP_BUNDLE/Contents/MacOS/WhereKeyApp"
 lipo -create "$PACKAGE_ROOT/arm64/wherekey" "$PACKAGE_ROOT/x86_64/wherekey" -output "$APP_BUNDLE/Contents/Helpers/wherekey"
 ditto "$PROJECT_ROOT/Integrations/codex/wherekey" "$APP_BUNDLE/Contents/Resources/Integrations/codex/wherekey"
