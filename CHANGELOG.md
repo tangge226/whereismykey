@@ -2,6 +2,8 @@
 
 ## 未发布
 
+- 新增无需 sudo 的源码安装器、Codex 自助安装提示和 AGENTS 安装约定；本机验证版本为 1.4.3，不创建新 DMG/Release。
+
 - Keychain 的读、写、删统一采用独立静默认证上下文；策略设置/恢复失败时不继续秘密操作或返回秘密，新增纯 mock 回归。
 - IPC 在 JSON 传输前使用内核 audit token 与 CDHash pin 双向认证 App/CLI，拒绝同 identifier 的其他代码，不提供环境变量认证绕过。
 - 加固 socket 路径、实例锁、inode 所有权、FD 继承、SIGPIPE、帧长度、绝对超时和并发上限。
