@@ -398,6 +398,7 @@ public enum WhereKeyError: LocalizedError, Equatable {
     case duplicate(String)
     case keychain(Int32)
     case ipcConnection(String)
+    case ipcAuthentication(String)
     case storage(String)
     case unsafeCurl(String)
     case unavailable(String)
@@ -407,9 +408,9 @@ public enum WhereKeyError: LocalizedError, Equatable {
         switch self {
         case .invalidInput(let value), .notFound(let value), .duplicate(let value),
              .storage(let value), .unsafeCurl(let value), .unavailable(let value),
-             .ipcConnection(let value): return value
+             .ipcConnection(let value), .ipcAuthentication(let value): return value
         case .authorizationRequired:
-            return "此服务需要钥匙串授权。请在 WhereKey 中点击对应服务的“授权”，不会自动重试或读取其他服务。"
+            return "此服务需要钥匙串授权。请在 WhereKey 中按当前服务的提示“允许访问 Key”，不会自动重试或读取其他服务。"
         case .keychain(let status):
             if status == -25293 {
                 return "系统钥匙串暂时拒绝访问。请重新打开 WhereKey 后再试。"

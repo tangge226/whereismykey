@@ -209,7 +209,7 @@ do {
     case "describe":
         let options = try parseOptions(arguments)
         guard let service = options.service else { throw CLIError.usage("请提供 --service NAME") }
-        let value = try send(IPCRequest(action: "describe", service: service)).description!
+        guard let value = try send(IPCRequest(action: "describe", service: service)).description else { throw WhereKeyError.unavailable("WhereKey 未返回服务描述") }
         try printJSON(value)
     case "run":
         let options = try parseOptions(arguments, permitsCommand: true)
@@ -220,7 +220,7 @@ do {
     case "call":
         let options = try parseOptions(arguments)
         guard let service = options.service else { throw CLIError.usage("请提供 --service NAME") }
-        let result = try send(IPCRequest(action: "call", service: service, keyAlias: options.keyAlias, cwd: FileManager.default.currentDirectoryPath)).checkResult!
+        guard let result = try send(IPCRequest(action: "call", service: service, keyAlias: options.keyAlias, cwd: FileManager.default.currentDirectoryPath)).checkResult else { throw WhereKeyError.unavailable("WhereKey 未返回调用结果") }
         if options.json { try printJSON(result) }
         else {
             if !result.responsePreview.isEmpty { print(result.responsePreview) }
@@ -230,7 +230,7 @@ do {
     case "check":
         let options = try parseOptions(arguments)
         guard let service = options.service else { throw CLIError.usage("请提供 --service NAME") }
-        let result = try send(IPCRequest(action: "check", service: service, keyAlias: options.keyAlias)).checkResult!
+        guard let result = try send(IPCRequest(action: "check", service: service, keyAlias: options.keyAlias)).checkResult else { throw WhereKeyError.unavailable("WhereKey 未返回检查结果") }
         if options.json { try printJSON(result) }
         else { print("\(result.status.displayName) · \(result.message) · \(result.elapsedMilliseconds)ms") }
         if result.status.isFailure { exit(1) }

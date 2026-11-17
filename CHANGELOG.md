@@ -1,5 +1,13 @@
 # 更新记录
 
+## 未发布
+
+- Keychain 的读、写、删统一采用独立静默认证上下文；策略设置/恢复失败时不继续秘密操作或返回秘密，新增纯 mock 回归。
+- IPC 在 JSON 传输前使用内核 audit token 与 CDHash pin 双向认证 App/CLI，拒绝同 identifier 的其他代码，不提供环境变量认证绕过。
+- 加固 socket 路径、实例锁、inode 所有权、FD 继承、SIGPIPE、帧长度、绝对超时和并发上限。
+- 构建签名启用 hardened runtime，移除 identifier-only 自定义要求，保留系统默认 ad-hoc CDHash 要求。
+- 真实 Keychain 项未读取或自动迁移；历史 ACL、Developer ID 和公证仍是后续工作。许可证不变。
+
 ## 1.4.2
 
 本版本汇总初始版本之后的通用服务接入、凭证访问和界面更新。

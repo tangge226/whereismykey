@@ -102,16 +102,56 @@ if let testURL = ProcessInfo.processInfo.environment["WHEREKEY_TEST_URL"] {
     require(apiRepository.catalog()[0].status == .valid, "自动检查结果未保存")
 }
 
-let server = IPCServer { request in
+let ipcSelf = try IPCPeerVerifier.currentExecutableURL()
+let server = IPCServer(trustedPeerExecutables: [ipcSelf]) { request in
     IPCResponse(ok: request.action == "catalog", catalog: [])
 }
 try server.start()
 defer { server.stop() }
-let ipcResponse = try IPCClient().send(IPCRequest(action: "catalog"))
+let ipcResponse = try IPCClient(trustedPeerExecutables: [ipcSelf]).send(IPCRequest(action: "catalog"))
 require(ipcResponse.ok, "IPC 往返失败")
-let rejectedResponse = try IPCClient().send(IPCRequest(action: "unknown"))
+let rejectedResponse = try IPCClient(trustedPeerExecutables: [ipcSelf]).send(IPCRequest(action: "unknown"))
 require(!rejectedResponse.ok, "IPC 业务错误不应伪装成连接失败")
 require(WhereKeyError.keychain(-25293).localizedDescription.contains("重新打开"), "Keychain 授权错误提示不清晰")
+// A different signed binary reusing the app identifier must fail both ways.
+// No attacker program is executed and the fixture holds no real credentials.
+server.stop()
+let counterfeit = FileManager.default.temporaryDirectory.appendingPathComponent("WhereKey-counterfeit-\(UUID().uuidString)")
+try FileManager.default.copyItem(at: URL(fileURLWithPath: "/usr/bin/true"), to: counterfeit)
+defer { try? FileManager.default.removeItem(at: counterfeit) }
+let signer = Process()
+signer.executableURL = URL(fileURLWithPath: "/usr/bin/codesign")
+signer.arguments = ["--force", "--sign", "-", "--identifier", "com.wherekey.mac", counterfeit.path]
+signer.standardOutput = FileHandle.nullDevice
+signer.standardError = FileHandle.nullDevice
+try signer.run(); signer.waitUntilExit()
+require(signer.terminationStatus == 0, "无法签名隔离的身份冒用fixture")
+final class IPCFixtureCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+    func add() { lock.lock(); count += 1; lock.unlock() }
+    var value: Int { lock.lock(); defer { lock.unlock() }; return count }
+}
+let rejectedCalls = IPCFixtureCounter()
+let rejectingServer = IPCServer(trustedPeerExecutables: [counterfeit]) { _ in
+    rejectedCalls.add(); return IPCResponse(ok: true)
+}
+try rejectingServer.start()
+requireThrows("服务端接受了同identifier不同代码的客户端") {
+    _ = try IPCClient(trustedPeerExecutables: [ipcSelf]).send(IPCRequest(action: "catalog"))
+}
+rejectingServer.stop()
+require(rejectedCalls.value == 0, "未认证请求进入了业务handler")
+let authenticServer = IPCServer(trustedPeerExecutables: [ipcSelf]) { _ in
+    rejectedCalls.add(); return IPCResponse(ok: true)
+}
+try authenticServer.start()
+requireThrows("客户端接受了同identifier不同代码的服务端") {
+    _ = try IPCClient(trustedPeerExecutables: [counterfeit]).send(IPCRequest(action: "catalog"))
+}
+authenticServer.stop()
+require(rejectedCalls.value == 0, "身份失败前泄露了JSON请求")
+
 
 let deepSeekSecret = "sk-deepseek-self-test-123456"
 let deepSeekImports = NoteImportParser.parse("""
