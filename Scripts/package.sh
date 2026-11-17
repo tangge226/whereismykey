@@ -7,6 +7,7 @@ DIST_ROOT="$PROJECT_ROOT/dist"
 APP_BUNDLE="$PACKAGE_ROOT/WhereKey.app"
 STAGE_ROOT="$PACKAGE_ROOT/dmg"
 SDK_PATH="$(xcrun --sdk macosx --show-sdk-path)"
+APP_VERSION="$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "$PROJECT_ROOT/Resources/Info.plist")"
 
 build_architecture() {
   local architecture="$1"
@@ -35,7 +36,7 @@ build_architecture() {
     -o "$architecture_root/wherekey"
 }
 
-rm -rf "$PACKAGE_ROOT" "$DIST_ROOT"
+rm -rf "$PACKAGE_ROOT"
 mkdir -p "$PACKAGE_ROOT" "$DIST_ROOT"
 build_architecture arm64
 build_architecture x86_64
@@ -48,10 +49,16 @@ ditto "$PROJECT_ROOT/Integrations/codex/wherekey" "$APP_BUNDLE/Contents/Resource
 codesign --force --sign - --identifier com.wherekey.cli --requirements "$PROJECT_ROOT/Resources/WhereKeyCLI.requirements" "$APP_BUNDLE/Contents/Helpers/wherekey"
 codesign --force --sign - --identifier com.wherekey.mac --requirements "$PROJECT_ROOT/Resources/WhereKey.requirements" "$APP_BUNDLE"
 
+codesign --verify --deep --strict "$APP_BUNDLE"
+
 mkdir -p "$STAGE_ROOT"
 ditto "$APP_BUNDLE" "$STAGE_ROOT/WhereKey.app"
 cp "$PROJECT_ROOT/Scripts/Install CLI & Codex Skill.command" "$STAGE_ROOT/Install CLI & Codex Skill.command"
 chmod +x "$STAGE_ROOT/Install CLI & Codex Skill.command"
 ln -s /Applications "$STAGE_ROOT/Applications"
-hdiutil create -volname "WhereKey" -srcfolder "$STAGE_ROOT" -ov -format UDZO "$DIST_ROOT/WhereKey-1.1.1-universal.dmg"
-echo "$DIST_ROOT/WhereKey-1.1.1-universal.dmg"
+hdiutil create -volname "WhereKey" -srcfolder "$STAGE_ROOT" -ov -format UDZO "$DIST_ROOT/WhereKey-$APP_VERSION-universal.dmg"
+(
+  cd "$DIST_ROOT"
+  shasum -a 256 "WhereKey-$APP_VERSION-universal.dmg" > SHA256SUMS
+)
+echo "$DIST_ROOT/WhereKey-$APP_VERSION-universal.dmg"

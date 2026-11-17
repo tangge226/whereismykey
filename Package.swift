@@ -15,6 +15,7 @@ let package = Package(
             swiftSettings: [.unsafeFlags(["-swift-version", "5"])],
             linkerSettings: [
                 .linkedFramework("Security"),
+                .linkedFramework("LocalAuthentication"),
             ]
         ),
         .executableTarget(

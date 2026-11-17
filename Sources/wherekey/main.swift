@@ -203,7 +203,7 @@ do {
         else {
             for service in services {
                 let keyNames = service.credentials.map { $0.alias + ($0.isDefault ? "（默认）" : "") }.joined(separator: ", ")
-                print("\(service.name)\t\(service.kind.displayName)\t\(service.status.displayName)\t\(keyNames)")
+                print("\(service.name)\t\(service.kind.displayName)\t\(service.setupMessage ?? service.status.displayName)\t\(keyNames)")
             }
         }
     case "describe":
@@ -226,14 +226,14 @@ do {
             if !result.responsePreview.isEmpty { print(result.responsePreview) }
             FileHandle.standardError.write(Data("\(result.status.displayName) · HTTP \(result.httpStatus.map(String.init) ?? "-") · \(result.elapsedMilliseconds)ms\n".utf8))
         }
-        if result.status == .invalid { exit(1) }
+        if result.status.isFailure { exit(1) }
     case "check":
         let options = try parseOptions(arguments)
         guard let service = options.service else { throw CLIError.usage("请提供 --service NAME") }
         let result = try send(IPCRequest(action: "check", service: service, keyAlias: options.keyAlias)).checkResult!
         if options.json { try printJSON(result) }
         else { print("\(result.status.displayName) · \(result.message) · \(result.elapsedMilliseconds)ms") }
-        if result.status == .invalid { exit(1) }
+        if result.status.isFailure { exit(1) }
     case "help", "--help", "-h": print(usage)
     default: throw CLIError.usage("未知命令：\(command)\n\n\(usage)")
     }

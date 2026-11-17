@@ -5,10 +5,12 @@ PROJECT_ROOT="${0:A:h:h}"
 BUILD_ROOT="$PROJECT_ROOT/.build/local"
 MODULE_ROOT="$BUILD_ROOT/module"
 APP_BUNDLE="$PROJECT_ROOT/.build/WhereKey.app"
+SDK_PATH="$(xcrun --sdk macosx --show-sdk-path)"
+BUILD_TARGET="$(uname -m)-apple-macosx14.0"
 
 mkdir -p "$MODULE_ROOT"
 
-swiftc -swift-version 5 -parse-as-library -enable-testing \
+swiftc -swift-version 5 -sdk "$SDK_PATH" -target "$BUILD_TARGET" -parse-as-library -enable-testing \
   -emit-module -emit-library -static \
   "$PROJECT_ROOT"/Sources/WhereKeyCore/*.swift \
   -module-name WhereKeyCore \
@@ -16,13 +18,13 @@ swiftc -swift-version 5 -parse-as-library -enable-testing \
   -framework Security \
   -o "$MODULE_ROOT/libWhereKeyCore.a"
 
-swiftc -swift-version 5 -parse-as-library \
+swiftc -swift-version 5 -sdk "$SDK_PATH" -target "$BUILD_TARGET" -parse-as-library \
   -I "$MODULE_ROOT" -L "$MODULE_ROOT" -lWhereKeyCore \
   "$PROJECT_ROOT"/Sources/WhereKeyApp/*.swift \
   -framework SwiftUI -framework AppKit -framework Security \
   -o "$BUILD_ROOT/WhereKeyApp"
 
-swiftc -swift-version 5 \
+swiftc -swift-version 5 -sdk "$SDK_PATH" -target "$BUILD_TARGET" \
   -I "$MODULE_ROOT" -L "$MODULE_ROOT" -lWhereKeyCore \
   "$PROJECT_ROOT/Sources/wherekey/main.swift" \
   -framework Security \

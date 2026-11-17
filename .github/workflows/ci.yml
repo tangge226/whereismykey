@@ -1,0 +1,46 @@
+name: macOS CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: Build and test
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Toolchain
+        run: swift --version
+      - name: Build, isolated self-tests, and CLI smoke test
+        run: ./Scripts/test.sh
+      - name: Swift Package tests
+        run: swift test
+  universal-package:
+    name: Universal package
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Package Apple Silicon and Intel DMG
+        run: ./Scripts/package.sh
+      - name: Verify checksum
+        working-directory: dist
+        run: shasum -a 256 -c SHA256SUMS
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: WhereKey-universal
+          path: |
+            dist/*.dmg
+            dist/SHA256SUMS
+          if-no-files-found: error
