@@ -30,12 +30,17 @@ swiftc -swift-version 5 -sdk "$SDK_PATH" -target "$BUILD_TARGET" \
   -framework Security \
   -o "$BUILD_ROOT/wherekey"
 
+# Default ad-hoc requirements bind each build's code hash. Never replace them
+# with an identifier-only requirement, which another program can impersonate.
+codesign --force --sign - --options runtime --identifier com.wherekey.mac "$BUILD_ROOT/WhereKeyApp"
+codesign --force --sign - --options runtime --identifier com.wherekey.cli "$BUILD_ROOT/wherekey"
+
 mkdir -p "$APP_BUNDLE/Contents/MacOS" "$APP_BUNDLE/Contents/Helpers" "$APP_BUNDLE/Contents/Resources/Integrations/codex"
 cp "$PROJECT_ROOT/Resources/Info.plist" "$APP_BUNDLE/Contents/Info.plist"
 cp "$BUILD_ROOT/WhereKeyApp" "$APP_BUNDLE/Contents/MacOS/WhereKeyApp"
 cp "$BUILD_ROOT/wherekey" "$APP_BUNDLE/Contents/Helpers/wherekey"
 ditto "$PROJECT_ROOT/Integrations/codex/wherekey" "$APP_BUNDLE/Contents/Resources/Integrations/codex/wherekey"
-codesign --force --sign - --identifier com.wherekey.cli --requirements "$PROJECT_ROOT/Resources/WhereKeyCLI.requirements" "$APP_BUNDLE/Contents/Helpers/wherekey"
-codesign --force --sign - --identifier com.wherekey.mac --requirements "$PROJECT_ROOT/Resources/WhereKey.requirements" "$APP_BUNDLE"
+codesign --force --sign - --options runtime --identifier com.wherekey.cli "$APP_BUNDLE/Contents/Helpers/wherekey"
+codesign --force --sign - --options runtime --identifier com.wherekey.mac "$APP_BUNDLE"
 
 echo "$APP_BUNDLE"

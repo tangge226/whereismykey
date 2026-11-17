@@ -46,8 +46,8 @@ cp "$PROJECT_ROOT/Resources/Info.plist" "$APP_BUNDLE/Contents/Info.plist"
 lipo -create "$PACKAGE_ROOT/arm64/WhereKeyApp" "$PACKAGE_ROOT/x86_64/WhereKeyApp" -output "$APP_BUNDLE/Contents/MacOS/WhereKeyApp"
 lipo -create "$PACKAGE_ROOT/arm64/wherekey" "$PACKAGE_ROOT/x86_64/wherekey" -output "$APP_BUNDLE/Contents/Helpers/wherekey"
 ditto "$PROJECT_ROOT/Integrations/codex/wherekey" "$APP_BUNDLE/Contents/Resources/Integrations/codex/wherekey"
-codesign --force --sign - --identifier com.wherekey.cli --requirements "$PROJECT_ROOT/Resources/WhereKeyCLI.requirements" "$APP_BUNDLE/Contents/Helpers/wherekey"
-codesign --force --sign - --identifier com.wherekey.mac --requirements "$PROJECT_ROOT/Resources/WhereKey.requirements" "$APP_BUNDLE"
+codesign --force --sign - --options runtime --identifier com.wherekey.cli "$APP_BUNDLE/Contents/Helpers/wherekey"
+codesign --force --sign - --options runtime --identifier com.wherekey.mac "$APP_BUNDLE"
 
 codesign --verify --deep --strict "$APP_BUNDLE"
 

@@ -64,148 +64,127 @@ public enum IPCPath {
     public static var socket: URL { directory.appendingPathComponent("wherekey.sock") }
 }
 
+public struct IPCConfiguration: Sendable {
+    public var directoryURL: URL
+    public var requestTimeout: TimeInterval
+    public var responseTimeout: TimeInterval
+    public var writeTimeout: TimeInterval
+    public var maxConnections: Int
+
+    public init(directoryURL: URL = IPCPath.directory, requestTimeout: TimeInterval = 5,
+                responseTimeout: TimeInterval = 65, writeTimeout: TimeInterval = 5, maxConnections: Int = 8) {
+        self.directoryURL = directoryURL
+        self.requestTimeout = requestTimeout
+        self.responseTimeout = responseTimeout
+        self.writeTimeout = writeTimeout
+        self.maxConnections = maxConnections
+    }
+
+    var socketURL: URL { directoryURL.appendingPathComponent("wherekey.sock") }
+    func validate() throws {
+        guard directoryURL.isFileURL, (1...32).contains(maxConnections),
+              [requestTimeout, responseTimeout, writeTimeout].allSatisfy({ $0.isFinite && $0 > 0 && $0 <= 120 }) else {
+            throw WhereKeyError.invalidInput("IPC 配置无效")
+        }
+    }
+}
+
 public final class IPCServer: @unchecked Sendable {
     public typealias Handler = @Sendable (IPCRequest) -> IPCResponse
-
     private let handler: Handler
+    private let configuration: IPCConfiguration
+    private let trustedPeers: [URL]?
+    private let lifecycle = NSLock()
+    private var context: IPCServerContext?
     private let queue = DispatchQueue(label: "com.wherekey.ipc", qos: .userInitiated, attributes: .concurrent)
-    private var descriptor: Int32 = -1
-    private var running = false
 
-    public init(handler: @escaping Handler) {
+    public init(configuration: IPCConfiguration = IPCConfiguration(), trustedPeerExecutables: [URL]? = nil,
+                handler: @escaping Handler) {
+        self.configuration = configuration
+        self.trustedPeers = trustedPeerExecutables
         self.handler = handler
     }
 
     deinit { stop() }
 
     public func start() throws {
-        guard !running else { return }
-        try FileManager.default.createDirectory(at: IPCPath.directory, withIntermediateDirectories: true)
-        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: IPCPath.directory.path)
-        unlink(IPCPath.socket.path)
-        let fd = Darwin.socket(AF_UNIX, SOCK_STREAM, 0)
-        guard fd >= 0 else { throw WhereKeyError.unavailable("无法创建本地通信通道") }
-        var address = sockaddr_un()
-        address.sun_family = sa_family_t(AF_UNIX)
-        let pathBytes = Array(IPCPath.socket.path.utf8CString)
-        guard pathBytes.count <= MemoryLayout.size(ofValue: address.sun_path) else {
-            Darwin.close(fd)
-            throw WhereKeyError.unavailable("本地通信路径过长")
-        }
-        withUnsafeMutablePointer(to: &address.sun_path) { pointer in
-            pointer.withMemoryRebound(to: CChar.self, capacity: pathBytes.count) { destination in
-                for index in pathBytes.indices { destination[index] = pathBytes[index] }
+        lifecycle.lock(); defer { lifecycle.unlock() }
+        guard context == nil else { return }
+        try configuration.validate()
+        let verifier = try IPCPeerVerifier(role: .server, trustedExecutables: trustedPeers)
+        let next = try IPCServerContext(configuration: configuration)
+        context = next
+        let handler = handler, configuration = configuration, queue = queue
+        // Capture the generation, never a mutable descriptor on self.
+        queue.async {
+            defer { next.finish() }
+            while !next.isStopped {
+                var ready = pollfd(fd: next.listener, events: Int16(POLLIN), revents: 0)
+                let result = Darwin.poll(&ready, 1, 100)
+                if result < 0 { if errno == EINTR { continue }; break }
+                if result == 0 { continue }
+                if next.isStopped { break }
+                let client = Darwin.accept(next.listener, nil, nil)
+                if client < 0 {
+                    if [EINTR, EAGAIN, EWOULDBLOCK].contains(errno) { continue }
+                    break
+                }
+                do { try IPCTransport.configureDescriptor(client) }
+                catch { Darwin.close(client); continue }
+                guard next.register(client) else { Darwin.close(client); continue }
+                queue.async {
+                    defer { next.release(client) }
+                    do {
+                        // Authenticate before decoding even a catalog request.
+                        try verifier.verify(socket: client)
+                        let data = try IPCTransport.readMessage(from: client, timeout: configuration.requestTimeout)
+                        guard !next.isStopped else { return }
+                        let request = try JSONDecoder().decode(IPCRequest.self, from: data)
+                        let response = handler(request)
+                        guard !next.isStopped else { return }
+                        try IPCTransport.writeMessage(try JSONEncoder().encode(response), to: client, timeout: configuration.writeTimeout)
+                    } catch {
+                        // Do not reflect raw JSON, secrets, or unauthenticated errors.
+                        // Closing also avoids sending any data to an untrusted peer.
+                    }
+                }
             }
         }
-        let addressLength = socklen_t(MemoryLayout<sa_family_t>.size + pathBytes.count)
-        let bindResult = withUnsafePointer(to: &address) {
-            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { Darwin.bind(fd, $0, addressLength) }
-        }
-        guard bindResult == 0, Darwin.listen(fd, 16) == 0 else {
-            Darwin.close(fd)
-            throw WhereKeyError.unavailable("无法启动本地通信服务")
-        }
-        chmod(IPCPath.socket.path, 0o600)
-        descriptor = fd
-        running = true
-        queue.async { [weak self] in self?.acceptLoop() }
     }
 
     public func stop() {
-        running = false
-        if descriptor >= 0 { Darwin.close(descriptor); descriptor = -1 }
-        unlink(IPCPath.socket.path)
-    }
-
-    private func acceptLoop() {
-        while running {
-            let client = Darwin.accept(descriptor, nil, nil)
-            guard client >= 0 else { if running { continue }; break }
-            var uid: uid_t = 0
-            var gid: gid_t = 0
-            guard getpeereid(client, &uid, &gid) == 0, uid == getuid() else {
-                Darwin.close(client)
-                continue
-            }
-            queue.async { [weak self] in self?.handle(client) }
-        }
-    }
-
-    private func handle(_ client: Int32) {
-        defer { Darwin.close(client) }
-        do {
-            let data = try Self.readMessage(from: client)
-            let request = try JSONDecoder().decode(IPCRequest.self, from: data)
-            let response = handler(request)
-            try Self.writeMessage(try JSONEncoder().encode(response), to: client)
-        } catch {
-            let response = IPCResponse(ok: false, error: error.localizedDescription)
-            if let data = try? JSONEncoder().encode(response) { try? Self.writeMessage(data, to: client) }
-        }
-    }
-
-    fileprivate static func readMessage(from fd: Int32) throws -> Data {
-        var lengthNetwork: UInt32 = 0
-        try withUnsafeMutableBytes(of: &lengthNetwork) { buffer in
-            try readExactly(fd, into: buffer)
-        }
-        let length = Int(UInt32(bigEndian: lengthNetwork))
-        guard length > 0, length <= 1_048_576 else { throw WhereKeyError.unavailable("本地消息长度无效") }
-        var data = Data(count: length)
-        try data.withUnsafeMutableBytes { buffer in try readExactly(fd, into: buffer) }
-        return data
-    }
-
-    fileprivate static func writeMessage(_ data: Data, to fd: Int32) throws {
-        var length = UInt32(data.count).bigEndian
-        try withUnsafeBytes(of: &length) { try writeAll(fd, from: $0) }
-        try data.withUnsafeBytes { try writeAll(fd, from: $0) }
-    }
-
-    private static func readExactly(_ fd: Int32, into buffer: UnsafeMutableRawBufferPointer) throws {
-        var offset = 0
-        while offset < buffer.count {
-            let count = Darwin.read(fd, buffer.baseAddress!.advanced(by: offset), buffer.count - offset)
-            guard count > 0 else { throw WhereKeyError.unavailable("本地连接已断开") }
-            offset += count
-        }
-    }
-
-    private static func writeAll(_ fd: Int32, from buffer: UnsafeRawBufferPointer) throws {
-        var offset = 0
-        while offset < buffer.count {
-            let count = Darwin.write(fd, buffer.baseAddress!.advanced(by: offset), buffer.count - offset)
-            guard count > 0 else { throw WhereKeyError.unavailable("无法写入本地连接") }
-            offset += count
-        }
+        lifecycle.lock()
+        let previous = context
+        context = nil
+        // Keep lifecycle serialized until the old accept generation releases its lock.
+        previous?.stop()
+        previous?.finished.wait()
+        lifecycle.unlock()
     }
 }
 
 public final class IPCClient {
-    public init() {}
+    private let configuration: IPCConfiguration
+    private let trustedPeers: [URL]?
+    public init(configuration: IPCConfiguration = IPCConfiguration(), trustedPeerExecutables: [URL]? = nil) {
+        self.configuration = configuration
+        self.trustedPeers = trustedPeerExecutables
+    }
 
     public func send(_ request: IPCRequest) throws -> IPCResponse {
+        try configuration.validate()
+        let verifier = try IPCPeerVerifier(role: .client, trustedExecutables: trustedPeers)
+        let directory = try IPCSecureDirectory(configuration.directoryURL, create: false)
+        defer { Darwin.close(directory.fd) }
+        try directory.validateSocket(requireExists: true)
         let fd = Darwin.socket(AF_UNIX, SOCK_STREAM, 0)
-        guard fd >= 0 else { throw WhereKeyError.ipcConnection("无法创建本地连接") }
+        guard fd >= 0 else { throw WhereKeyError.unavailable("无法创建本地连接") }
         defer { Darwin.close(fd) }
-        var address = sockaddr_un()
-        address.sun_family = sa_family_t(AF_UNIX)
-        let pathBytes = Array(IPCPath.socket.path.utf8CString)
-        guard pathBytes.count <= MemoryLayout.size(ofValue: address.sun_path) else {
-            throw WhereKeyError.unavailable("本地通信路径过长")
-        }
-        withUnsafeMutablePointer(to: &address.sun_path) { pointer in
-            pointer.withMemoryRebound(to: CChar.self, capacity: pathBytes.count) { destination in
-                for index in pathBytes.indices { destination[index] = pathBytes[index] }
-            }
-        }
-        let addressLength = socklen_t(MemoryLayout<sa_family_t>.size + pathBytes.count)
-        let connected = withUnsafePointer(to: &address) {
-            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { Darwin.connect(fd, $0, addressLength) }
-        }
-        guard connected == 0 else { throw WhereKeyError.ipcConnection("WhereKey 应用未运行") }
-        try IPCServer.writeMessage(try JSONEncoder().encode(request), to: fd)
-        let response = try JSONDecoder().decode(IPCResponse.self, from: IPCServer.readMessage(from: fd))
-        return response
+        try IPCTransport.configureDescriptor(fd)
+        try IPCTransport.connect(fd, to: configuration.socketURL, timeout: configuration.requestTimeout)
+        // Validate the live server before disclosing service names, paths, or keys.
+        try verifier.verify(socket: fd)
+        try IPCTransport.writeMessage(try JSONEncoder().encode(request), to: fd, timeout: configuration.writeTimeout)
+        return try JSONDecoder().decode(IPCResponse.self, from: IPCTransport.readMessage(from: fd, timeout: configuration.responseTimeout))
     }
 }
